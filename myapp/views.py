@@ -90,8 +90,8 @@ class ExpenseCategoryUpdateDeleteView(mixins.DestroyModelMixin,
 class IncomeCategoryView(mixins.ListModelMixin,
                             mixins.CreateModelMixin,
                             generics.GenericAPIView):
-    queryset = ExpenseCategory.objects.all()
-    serializer_class = ExpenseCategorySerializer
+    queryset = IncomeCategory.objects.all()
+    serializer_class = IncomeCategorySerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
 
@@ -106,8 +106,8 @@ class IncomeCategoryDeletView(
                         mixins.UpdateModelMixin,
                         mixins.DestroyModelMixin,
                         generics.GenericAPIView):
-    queryset = ExpenseCategory.objects.all()
-    serializer_class = ExpenseCategorySerializer
+    queryset = IncomeCategory.objects.all()
+    serializer_class = IncomeCategorySerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
 
@@ -147,6 +147,36 @@ class SubCategoryExpenseUDView(mixins.DestroyModelMixin,
     def post(self, request, *args, **kwargs):
         return self.delete(request,  *args, **kwargs)
     
+    
+class SubCategoryIncomeView(mixins.CreateModelMixin,
+                         mixins.ListModelMixin,
+                         generics.GenericAPIView):
+    queryset = SubCategoriesIncome.objects.all()
+    serializer_class = SubCategoriesIncomeSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+    
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+    
+    
+class SubCategoryIncomeUDView(mixins.DestroyModelMixin,
+                               mixins.UpdateModelMixin,
+                               generics.GenericAPIView):
+    queryset = SubCategoriesIncome.objects.all()
+    serializer_class = SubCategoriesIncomeSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+    
+    def post(self, request, *args, **kwargs):
+        return self.delete(request,  *args, **kwargs)
 
 class ExpenseView(viewsets.ModelViewSet):
     serializer_class = ExpenseSerializer
@@ -219,11 +249,13 @@ class IncomeView(viewsets.ModelViewSet):
 
 
     
+
 class MultiQuerySetView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     authentication_classes = [JWTAuthentication]
+    
     def get(self, request, *args, **kwargs):
-        category = request.query_params.get('category', False)
+        category = request.query_params.get('category', None)
 
         if category:
             expense_queryset = Expense.objects.filter(user=request.user, category__name=category)
@@ -232,8 +264,9 @@ class MultiQuerySetView(views.APIView):
             expense_queryset = Expense.objects.filter(user=request.user)
             income_queryset = Income.objects.filter(user=request.user)
 
-        expense_serializer = ExpenseSerializer(expense_queryset, many=True)
-        income_serializer = IncomeSerializer(income_queryset, many=True)
+        expense_serializer = ExpenseSerializer(expense_queryset, many=True, context={'request': request})
+        income_serializer = IncomeSerializer(income_queryset, many=True, context={'request': request})
+
 
         combined_data = [
             {"type": "expense", **item} for item in expense_serializer.data
@@ -241,6 +274,7 @@ class MultiQuerySetView(views.APIView):
             {"type": "income", **item} for item in income_serializer.data
         ]
 
+        # Güvenli sıralama
         combined_data_sorted = sorted(combined_data, key=lambda x: x.get('date', ''), reverse=True)
 
         data = {
