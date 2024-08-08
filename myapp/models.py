@@ -1,10 +1,9 @@
-from typing import Iterable
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils import timezone
-from mptt.models import MPTTModel, TreeForeignKey
 from django.core.exceptions import ValidationError
 from .managers import CustomUserManager
+
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
@@ -16,7 +15,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(default=timezone.now)
     last_logout = models.DateTimeField(default=timezone.now)
     is_staff = models.BooleanField(default=False)
-    is_superuser = models.BooleanField(default=False)  # Bu alanı ekleyin
+    is_superuser = models.BooleanField(default=False) 
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -28,23 +27,26 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     
     
 class BankAccounts(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     name = models.CharField(max_length=50)
     account_currency = models.CharField(max_length=50)
     initial_amount = models.FloatField()
     notes = models.TextField()
     
     
+    def save(self, *args, **kwargs):
+        if not self.user and hasattr(self, 'request') and self.request.user.is_authenticated:
+            self.user = self.request.user
+        
+        super().save(*args, **kwargs)
+    
     
     def __str__(self) -> str:
         return self.name
     
     
-class ExpenseCategory(MPTTModel):
+class ExpenseCategory(models.Model):
     name = models.CharField(max_length=50, unique=True)
-    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
-
-    class MPTTMeta:
-        order_insertion_by = ['name']
 
     def __str__(self):
         return self.name
@@ -62,7 +64,7 @@ class IncomeCategory(models.Model):
     
 class SubCategoriesExpense(models.Model):
     name = models.CharField(max_length=50)
-    expanse_category = TreeForeignKey(ExpenseCategory,null=True, blank=True, on_delete=models.SET_NULL)
+    expanse_category = models.ForeignKey(ExpenseCategory, on_delete=models.CASCADE)
     
     def __str__(self) -> str:
         return self.name
@@ -80,6 +82,7 @@ class SubCategoriesIncome(models.Model):
         
 
 class Expense(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     category = models.ForeignKey(ExpenseCategory, on_delete=models.CASCADE)
     value = models.FloatField()
     account = models.ForeignKey(BankAccounts, on_delete=models.CASCADE)
@@ -93,16 +96,16 @@ class Expense(models.Model):
     
     def save(self, *args, **kwargs):
         
-        if self.pk is None:  # Yeni bir harcama oluşturuluyorsa
+        if self.pk is None: 
             if self.account:
                 account = BankAccounts.objects.get(id=self.account.id)
                 if account.initial_amount < self.value:
                     raise ValidationError("Insufficient funds in the account.")
         
-        # Harcamayı veritabanına kaydet
+ 
         super(Expense, self).save(*args, **kwargs)
         
-        # Hesap bakiyesini güncelle
+
         if self.account and self.value:
             try:
                 account = BankAccounts.objects.get(id=self.account.id)
@@ -111,16 +114,14 @@ class Expense(models.Model):
             except BankAccounts.DoesNotExist:
                 raise ValidationError("Account does not exist.")
 
-                
-        
-        
-            
-            
     def __str__(self):
         return f"{self.category.name} - {self.value} - {self.date} - {self.account.name }"
 
 
+
+
 class Income(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     category = models.ForeignKey(IncomeCategory, on_delete=models.CASCADE)
     value = models.FloatField()
     account = models.ForeignKey(BankAccounts, on_delete=models.CASCADE)

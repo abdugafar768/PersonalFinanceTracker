@@ -7,11 +7,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.models import Sum
 from datetime import datetime, timedelta
-from drf_multiple_model.views import FlatMultipleModelAPIView, FlatMultipleModelMixin
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
-from .filters import *
-from rest_framework.decorators import api_view
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 
@@ -26,8 +22,9 @@ class UserRegistrationAPIView(generics.CreateAPIView):
 
 
 class LogoutAPIView(generics.GenericAPIView):
+    permission_classes = (IsAuthenticated,)
     serializer_class = LogoutSerializer
-    permission_classes = (permissions.IsAuthenticated,)
+
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -35,10 +32,18 @@ class LogoutAPIView(generics.GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
     
     
-
+    
 class BankAccountView(viewsets.ModelViewSet):
-    queryset = BankAccounts.objects.all()
     serializer_class = BankAccountsSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get_queryset(self):
+        return BankAccounts.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
     
     @action(detail=False, methods=['get'])
     def total_balance(self, request):
@@ -50,10 +55,13 @@ class BankAccountView(viewsets.ModelViewSet):
 
 
 class ExpenseCategoryView(mixins.ListModelMixin,
-                            mixins.CreateModelMixin,
-                            generics.GenericAPIView):
+                          mixins.CreateModelMixin,
+                          generics.GenericAPIView):
+    
     queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
@@ -65,8 +73,11 @@ class ExpenseCategoryView(mixins.ListModelMixin,
 class ExpenseCategoryUpdateDeleteView(mixins.DestroyModelMixin,
                                       mixins.UpdateModelMixin,
                                       generics.GenericAPIView):
+    
     queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, *args, **kwargs):
         return self.destroy(request, *args, **kwargs)
@@ -81,6 +92,8 @@ class IncomeCategoryView(mixins.ListModelMixin,
                             generics.GenericAPIView):
     queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
@@ -95,6 +108,8 @@ class IncomeCategoryDeletView(
                         generics.GenericAPIView):
     queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
 
     def put(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs)
@@ -107,6 +122,8 @@ class SubCategoryExpenseView(mixins.CreateModelMixin,
                          generics.GenericAPIView):
     queryset = SubCategoriesExpense.objects.all()
     serializer_class = SubCategoriesExpenseSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
     
     
     def get(self, request, *args, **kwargs):
@@ -121,6 +138,8 @@ class SubCategoryExpenseUDView(mixins.DestroyModelMixin,
                                generics.GenericAPIView):
     queryset = SubCategoriesExpense.objects.all()
     serializer_class = SubCategoriesExpenseSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
     
     def put(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs)
@@ -130,11 +149,19 @@ class SubCategoryExpenseUDView(mixins.DestroyModelMixin,
     
 
 class ExpenseView(viewsets.ModelViewSet):
-    queryset = Expense.objects.all().order_by('-date')
+    queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
-    
-    
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
 
+    
+    
+    def get_queryset(self):
+        return Expense.objects.filter(user=self.request.user).order_by('-date')
+    
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
     
     @action(detail=False, methods=['get'])
     def total_expense(self, request):
@@ -150,19 +177,25 @@ class ExpenseView(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def last_month_expense(self, request):
-
         last_day_of_last_month = datetime.today().replace(day=1) - timedelta(days=1)
-     
-        
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
-        
+
         total = self.get_queryset().filter(date__range=(first_day_of_last_month, last_day_of_last_month)).aggregate(total=Sum('value'))['total'] or 0
         return Response({'Last Month Expense': total})
 
+
+
 class IncomeView(viewsets.ModelViewSet):
-    queryset = Income.objects.all().order_by('-date')
     serializer_class = IncomeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+   
+    def get_queryset(self):
+        return Income.objects.filter(user= self.request.user).order_by('-date')
     
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)  
+        
     @action(detail=False, methods=['get'])
     def total_income(self,request):
         total = self.get_queryset().aggregate(total=Sum('value'))['total']
@@ -170,9 +203,7 @@ class IncomeView(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def last_month_income(self,request):
-        # Geçen ayın son gününü bul
         last_day_of_last_month = datetime.today().replace(day=1) - timedelta(days=1)
-        # Geçen ayın ilk gününü bul
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
         
         total = self.get_queryset().filter(date__range=(first_day_of_last_month, last_day_of_last_month)).aggregate(total=Sum('value'))['total'] or 0
@@ -189,16 +220,17 @@ class IncomeView(viewsets.ModelViewSet):
 
     
 class MultiQuerySetView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     def get(self, request, *args, **kwargs):
         category = request.query_params.get('category', False)
 
         if category:
-            expense_queryset = Expense.objects.filter(category__name=category)
-            income_queryset = Income.objects.filter(category__name=category)
+            expense_queryset = Expense.objects.filter(user=request.user, category__name=category)
+            income_queryset = Income.objects.filter(user=request.user, category__name=category)
         else:
-            expense_queryset = Expense.objects.all()
-            income_queryset = Income.objects.all()
-
+            expense_queryset = Expense.objects.filter(user=request.user)
+            income_queryset = Income.objects.filter(user=request.user)
 
         expense_serializer = ExpenseSerializer(expense_queryset, many=True)
         income_serializer = IncomeSerializer(income_queryset, many=True)
@@ -208,10 +240,8 @@ class MultiQuerySetView(views.APIView):
         ] + [
             {"type": "income", **item} for item in income_serializer.data
         ]
-        
-        
-        combined_data_sorted = sorted(combined_data, key=lambda x: x.get('date', ''), reverse=True)
 
+        combined_data_sorted = sorted(combined_data, key=lambda x: x.get('date', ''), reverse=True)
 
         data = {
             'combined': combined_data_sorted
@@ -220,26 +250,5 @@ class MultiQuerySetView(views.APIView):
         return Response(data, status=status.HTTP_200_OK)
     
     
-    
-# @api_view(['GET'])
-# def projects_and_news(request):
-#     if request.method == 'GET':
-#  
-#         expense = Expense.objects.all()
-#         income = Income.objects.all()
-
-
-#         serializer1 = ExpenseSerializer(expense, many=True, context={'request': request})
-#         serializer2 = IncomeSerializer(income, many=True, context=  {'request': request})
-
-#         data = {
-#             'expense': serializer1.data,
-#             'income': serializer2.data
-#         }
-
-#         return Response(data, status=status.HTTP_200_OK)
-
-
-
 
     
