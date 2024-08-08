@@ -149,7 +149,6 @@ class SubCategoryExpenseUDView(mixins.DestroyModelMixin,
     
 
 class ExpenseView(viewsets.ModelViewSet):
-    queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
     permission_classes = [permissions.IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -210,11 +209,12 @@ class IncomeView(viewsets.ModelViewSet):
         return Response({'Last month income': total})
     
     @action(detail=False, methods=['get'])
-    def this_month_income(self, request):
+    def this_month_expense(self, request):
         start_date = datetime.today().replace(day=1)
         end_date = datetime.today()
-        total = self.get_queryset().filter(date_range=(start_date,end_date)).aggregate(total=Sum(['value']))['total'] or 0
-        return Response({'This Month Income':total})
+        total = self.get_queryset().filter(date__range=(start_date, end_date)).aggregate(total=Sum('value'))['total'] or 0
+        return Response({'This month income': total})
+    
 
 
 

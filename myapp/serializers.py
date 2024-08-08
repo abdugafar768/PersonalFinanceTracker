@@ -94,7 +94,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         user = kwargs['context']['request'].user
         super().__init__(*args, **kwargs)
         if user.is_authenticated:
-            self.fields['account'].querysetv = BankAccounts.objects.filter(user=user)
+            self.fields['account'].queryset = BankAccounts.objects.filter(user=user)
     
 
 
